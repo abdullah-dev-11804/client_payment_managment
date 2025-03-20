@@ -3,12 +3,12 @@ require_once '../../config/config.php';
 
 // Check if user is logged in and is client
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /client-payment-system/views/auth/login.php');
+  header('Location: ' . SITE_URL . '/views/auth/login.php');
     exit();
 }
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'client') {
-    header('Location: /client-payment-system/views/auth/login.php');
+  header('Location: ' . SITE_URL . '/views/auth/login.php');
     exit();
 }
 ?>

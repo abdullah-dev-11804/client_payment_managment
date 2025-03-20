@@ -1,17 +1,16 @@
 <?php
 require_once '../../config/config.php';
-
 // For debugging - remove in production
 error_log("Session data in dashboard: " . print_r($_SESSION, true));
 
 // Check if user is logged in and is admin
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /client-payment-system/views/auth/login.php');
+  header('Location: ' . SITE_URL . '/views/auth/login.php');
     exit();
 }
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: /client-payment-system/views/auth/login.php');
+  header('Location: ' . SITE_URL . '/views/auth/login.php');
     exit();
 }
 ?>

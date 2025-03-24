@@ -11,6 +11,20 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'client') {
   header('Location: ' . SITE_URL . '/views/auth/login.php');
     exit();
 }
+global $pdo;
+$stmt = $pdo->prepare("SELECT * FROM servers WHERE client_id = ?");
+$stmt->execute([$_SESSION['user_id']]);
+$servers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$total_due = 0;
+$active_services = count($servers);
+$today = new DateTime('2025-03-21'); // Hardcoded for testing; use new DateTime() in production
+foreach ($servers as $server) {
+    $due_date = new DateTime($server['next_due_date']);
+    if ($today >= $due_date) {
+        $total_due += $server['monthly_amount'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -187,26 +201,30 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'client') {
         <h4 class="mb-0">My Dashboard</h4>
         <div class="user-profile">
           <span>Welcome, <?php echo htmlspecialchars($_SESSION['email']); ?></span>
-          <div class="profile-image">
-            <i class="fas fa-user"></i>
-          </div>
+          <div class="profile-image"><i class="fas fa-user"></i></div>
         </div>
       </div>
     </div>
 
-    <div class="row g-4">
+    <?php if (isset($_GET['payment']) && $_GET['payment'] === 'success'): ?>
+        <div class="alert alert-success mt-3">Payment successful!</div>
+    <?php elseif (isset($_GET['payment']) && $_GET['payment'] === 'cancelled'): ?>
+        <div class="alert alert-warning mt-3">Payment was cancelled.</div>
+    <?php endif; ?>
+
+    <div class="row g-4 mt-3">
       <div class="col-md-4">
         <div class="stats-card">
           <h3>Active Services</h3>
-          <p>2</p>
-          <small class="text-muted">Web Hosting, Domain</small>
+          <p><?php echo $active_services; ?></p>
+          <small class="text-muted">Servers</small>
         </div>
       </div>
       <div class="col-md-4">
         <div class="stats-card">
           <h3>Due Payment</h3>
-          <p>$150</p>
-          <small class="text-muted">Next due: 15th Aug 2024</small>
+          <p>$<?php echo number_format($total_due, 2); ?></p>
+          <small class="text-muted">Total due now</small>
         </div>
       </div>
       <div class="col-md-4">
@@ -218,34 +236,50 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'client') {
       </div>
     </div>
 
-    <div class="payment-history">
-      <h4 class="mb-4">Recent Payments</h4>
+    <div class="payment-history mt-4">
+      <h4 class="mb-4">Your Servers</h4>
       <div class="table-responsive">
         <table class="table">
           <thead>
             <tr>
-              <th>Invoice #</th>
-              <th>Date</th>
+              <th>Server Name</th>
+              <th>Next Due Date</th>
               <th>Amount</th>
-              <th>Service</th>
               <th>Status</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>INV-2024-001</td>
-              <td>2024-01-15</td>
-              <td>$99.00</td>
-              <td>Web Hosting (Annual)</td>
-              <td><span class="status-badge status-paid">Paid</span></td>
-            </tr>
-            <tr>
-              <td>INV-2024-002</td>
-              <td>2024-02-01</td>
-              <td>$150.00</td>
-              <td>Domain Renewal</td>
-              <td><span class="status-badge status-pending">Pending</span></td>
-            </tr>
+            <?php foreach ($servers as $server): ?>
+                <?php
+                $due_date = new DateTime($server['next_due_date']);
+                $due_date->modify('-1 day'); // Consider due the day before
+                $is_due = $today >= $due_date;// Due if today is on or after due date
+                ?>
+                <tr>
+                    <td><?php echo htmlspecialchars($server['server_name']); ?></td>
+                    <td><?php echo $server['next_due_date']; ?></td>
+                    <td>$<?php echo number_format($server['monthly_amount'], 2); ?></td>
+                    <td>
+                        <span class="status-badge <?php echo $is_due ? 'status-due' : 'status-paid'; ?>">
+                            <?php echo $is_due ? 'Due' : 'Paid'; ?>
+                        </span>
+                    </td>
+                    <td>
+                        <form action="/client-payment-system/public/payment_initiate.php" method="GET" class="d-inline">
+                            <input type="hidden" name="server_id" value="<?php echo $server['id']; ?>">
+                            <select name="months" class="form-select d-inline w-auto">
+                                <option value="1">1 Month</option>
+                                <option value="2">2 Months</option>
+                                <option value="3">3 Months</option>
+                                <option value="6">6 Months</option>
+                                <option value="12">12 Months</option>
+                            </select>
+                            <button type="submit" class="btn btn-primary btn-sm"><?php echo $is_due ? 'Pay Now' : 'Pay in Advance'; ?></button>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
           </tbody>
         </table>
       </div>

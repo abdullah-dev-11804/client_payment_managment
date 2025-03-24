@@ -1,5 +1,5 @@
 <?php
-// /var/www/html/myproject/route/routes.php
+// /var/www/html/client-payment-system/routes/routes.php
 class Router {
     private $routes = [];
 
@@ -9,6 +9,7 @@ class Router {
 
     public function dispatch($url) {
         $method = $_SERVER['REQUEST_METHOD'];
+        error_log("Dispatching URL: $url with method: $method");
         $url = rtrim($url, '/');
         if (isset($this->routes[$method][$url])) {
             $handler = $this->routes[$method][$url];
@@ -39,6 +40,11 @@ $router->addRoute('GET', '/logout', 'AuthController@logout');
 $router->addRoute('GET', '/dashboard', 'AdminController@dashboard');
 $router->addRoute('GET', '/admin/dashboard', 'AdminController@dashboard');
 $router->addRoute('GET', '/client/dashboard', 'ClientController@dashboard');
-$router->addRoute('GET', '/admin/settings', 'AdminController@settings');
+$router->addRoute('GET', '/admin/settings', 'AdminController@showSettings');
+$router->addRoute('POST', '/admin/settings', 'AdminController@saveSettings');
+$router->addRoute('GET', '/payment/initiate', 'PaymentController@initiate');
+$router->addRoute('GET', '/payment/success', 'PaymentController@success');
+$router->addRoute('GET', '/payment/cancelled', 'PaymentController@cancelled');
 
 return $router;
+

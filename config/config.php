@@ -58,7 +58,7 @@ define('DB_NAME', $_ENV['DB_NAME'] ?? 'client_payment_system');
 define('DB_USER', $_ENV['DB_USER'] ?? 'project');
 define('DB_PASS', $_ENV['DB_PASS'] ?? 'project@1234');
 
-define('SITE_URL', $_ENV['SITE_URL'] ?? 'http://216.128.135.50/project');
+define('SITE_URL', $_ENV['SITE_URL'] ?? 'http://216.128.135.50/client-payment-system');
 define('SITE_NAME', $_ENV['SITE_NAME'] ?? 'Client Payment Management System');
 
 // Define paths

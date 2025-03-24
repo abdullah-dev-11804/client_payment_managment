@@ -1,18 +1,67 @@
 <?php
 require_once '../../config/config.php';
+
 // For debugging - remove in production
 error_log("Session data in dashboard: " . print_r($_SESSION, true));
 
 // Check if user is logged in and is admin
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ' . SITE_URL . '/views/auth/login.php');
+    header('Location: /client-payment-system/views/auth/login.php');
     exit();
 }
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-  header('Location: ' . SITE_URL . '/views/auth/login.php');
+    header('Location: /client-payment-system/views/auth/login.php');
     exit();
 }
+// Fetch total clients from the servers table
+
+if (!isset($pdo)) {
+  die("Database connection failed!");
+}
+
+// Query to count unique clients in the `servers` table
+$query = "SELECT COUNT(DISTINCT client_id) AS total FROM servers";
+$stmt = $pdo->prepare($query);
+$stmt->execute();
+$row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$totalClients = $row ? $row['total'] : 0;
+
+echo "Total Clients: " . $totalClients;
+
+// Query to count active servers (join `users` table where `status` is 'active')
+$queryActiveServers = "
+    SELECT COUNT(s.id) AS active_servers 
+    FROM servers s
+    JOIN users u ON s.user_id = u.id
+    WHERE u.status = 'active'
+";
+$stmtActive = $pdo->prepare($queryActiveServers);
+$stmtActive->execute();
+$rowActive = $stmtActive->fetch(PDO::FETCH_ASSOC);
+$activeServers = $rowActive ? $rowActive['active_servers'] : 0;
+
+// Query to fetch recent payments
+$queryPayments = "
+    SELECT p.amount, p.payment_date, p.status, u.name, u.email, s.server_name 
+    FROM payments p
+    JOIN users u ON p.user_id = u.id
+    JOIN servers s ON p.server_id = s.id
+    ORDER BY p.payment_date DESC
+    LIMIT 5
+";
+$query = "SELECT * FROM client_payments"; 
+$stmt = $pdo->prepare($query);
+$stmt->execute();
+$payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch the most recent registered client
+$queryRecentClient = "SELECT name, email, created_at FROM users ORDER BY created_at DESC LIMIT 1";
+$stmtRecentClient = $pdo->prepare($queryRecentClient);
+$stmtRecentClient->execute();
+$recentClient = $stmtRecentClient->fetch(PDO::FETCH_ASSOC);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -21,6 +70,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="../../public/css/style.css">
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <!-- Font Awesome -->
@@ -45,17 +95,15 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     left: 0;
     top: 0;
     background-color: var(--primary-color);
-    padding: 20px;
     color: white;
+    padding: 20px 0;
     transition: all 0.3s ease;
-    z-index: 1000;
   }
 
   .sidebar-brand {
+    padding: 20px;
     font-size: 1.5rem;
-    font-weight: 600;
-    padding: 20px 0;
-    text-align: center;
+    font-weight: bold;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
@@ -64,24 +112,18 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
   }
 
   .menu-item {
-    padding: 12px 20px;
+    display: block;
+    padding: 15px 20px;
     color: white;
     text-decoration: none;
-    display: flex;
-    align-items: center;
     transition: all 0.3s ease;
-    border-radius: 5px;
-    margin-bottom: 5px;
   }
 
-  .menu-item:hover {
-    background-color: var(--secondary-color);
-    color: white;
-    text-decoration: none;
-  }
-
+  .menu-item:hover,
   .menu-item.active {
     background-color: var(--secondary-color);
+    color: white;
+    text-decoration: none;
   }
 
   .menu-item i {
@@ -89,18 +131,17 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     width: 20px;
   }
 
-  /* Main Content Styles */
   .main-content {
     margin-left: var(--sidebar-width);
     padding: 20px;
   }
 
   .top-bar {
-    background-color: white;
-    padding: 15px 25px;
+    background: white;
+    padding: 20px;
     border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    margin-bottom: 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   .stat-card {
@@ -184,6 +225,11 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     color: white;
   }
 
+  .dropdown-item:hover {
+    background-color: #F77F2E;
+    color: white;
+  }
+
   .bg-soft-primary {
     background-color: rgba(244, 95, 30, 0.1);
     color: var(--secondary-color);
@@ -223,32 +269,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 </head>
 
 <body class="bg-light">
-  <!-- Sidebar -->
-  <div class="sidebar">
-    <div class="sidebar-brand">
-      Admin Panel
-    </div>
-    <div class="sidebar-menu">
-      <a href="#" class="menu-item active">
-        <i class="fas fa-dashboard"></i> Dashboard
-      </a>
-      <a href="clients.php" class="menu-item">
-        <i class="fas fa-users"></i> Clients
-      </a>
-      <a href="#" class="menu-item">
-        <i class="fas fa-credit-card"></i> Payments
-      </a>
-      <a href="hosting-plans.php" class="menu-item">
-        <i class="fas fa-server"></i> Hosting Plans
-      </a>
-      <a href="#" class="menu-item">
-        <i class="fas fa-cog"></i> Settings
-      </a>
-      <a href="../../controllers/AuthController.php?action=logout" class="menu-item">
-        <i class="fas fa-sign-out-alt"></i> Logout
-      </a>
-    </div>
-  </div>
+  <?php include 'sidebar.php'; ?>
 
   <!-- Main Content -->
   <div class="main-content">
@@ -265,16 +286,16 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 
     <!-- Stats Cards -->
     <div class="row g-4">
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
           <div class="stat-icon">
             <i class="fas fa-users"></i>
           </div>
-          <div class="stat-value">150</div>
+          <div class="stat-value"><?php echo $totalClients; ?></div>
           <div class="stat-label">Total Clients</div>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
           <div class="stat-icon">
             <i class="fas fa-dollar-sign"></i>
@@ -283,69 +304,87 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
           <div class="stat-label">Monthly Revenue</div>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
           <div class="stat-icon">
             <i class="fas fa-server"></i>
           </div>
-          <div class="stat-value">85</div>
+          <div class="stat-value"><?php echo $activeServers; ?></div>
           <div class="stat-label">Active Servers</div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-icon">
-            <i class="fas fa-ticket"></i>
-          </div>
-          <div class="stat-value">24</div>
-          <div class="stat-label">Support Tickets</div>
         </div>
       </div>
     </div>
 
-    <!-- Recent Payments Table -->
     <div class="table-responsive mt-4">
       <h5 class="mb-4">Recent Payments</h5>
       <table class="table table-hover">
         <thead>
           <tr>
-            <th>Client</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Server</th>
             <th>Amount</th>
-            <th>Date</th>
+            <th>Previous Payment</th>
+            <th>Next Payment</th>
             <th>Status</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td>John Doe</td>
-            <td>$299.99</td>
-            <td>2024-01-15</td>
-            <td><span class="badge bg-success status-badge">Paid</span></td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary">View</button>
-            </td>
-          </tr>
-          <tr>
-            <td>Jane Smith</td>
-            <td>$199.99</td>
-            <td>2024-01-14</td>
-            <td><span class="badge bg-warning status-badge">Pending</span></td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary">View</button>
-            </td>
-          </tr>
-          <tr>
-            <td>Mike Johnson</td>
-            <td>$499.99</td>
-            <td>2024-01-13</td>
-            <td><span class="badge bg-success status-badge">Paid</span></td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary">View</button>
-            </td>
-          </tr>
+          <?php
+            require_once '../../config/config.php'; // Ensure DB connection
+
+            $query = "SELECT 
+                u.name AS client_name,
+                u.email AS client_email,
+                hp.name AS server_name,
+                cp.amount,
+                cp.previous_payment_date,
+                cp.next_payment_date,
+                cp.status
+            FROM client_payments cp
+            JOIN users u ON cp.client_id = u.id
+            JOIN hosting_plans hp ON cp.plan_id = hp.id
+            ORDER BY cp.next_payment_date DESC
+            LIMIT 10";
+
+            $stmt = $pdo->prepare($query);
+            $stmt->execute();
+            $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (!empty($payments)) {
+                foreach ($payments as $payment) {
+                    $statusClass = ($payment['status'] == 'paid') ? 'success' : (($payment['status'] == 'overdue') ? 'danger' : 'warning');
+
+                    echo '<tr>';
+                    echo '<td>' . htmlspecialchars($payment['client_name'] ?? 'N/A') . '</td>';
+                    echo '<td>' . htmlspecialchars($payment['client_email'] ?? 'N/A') . '</td>';
+                    echo '<td>' . htmlspecialchars($payment['server_name'] ?? 'N/A') . '</td>';
+                    echo '<td>$' . number_format($payment['amount'], 2) . '</td>';
+                    echo '<td>' . (!empty($payment['previous_payment_date']) ? date('Y-m-d', strtotime($payment['previous_payment_date'])) : 'N/A') . '</td>';
+                    echo '<td>' . (!empty($payment['next_payment_date']) ? date('Y-m-d', strtotime($payment['next_payment_date'])) : 'N/A') . '</td>';
+                    echo '<td><span class="badge bg-' . $statusClass . ' status-badge">' . ucfirst($payment['status']) . '</span></td>';
+                    echo '<td><button class="btn btn-sm btn-outline-primary">View</button></td>';
+                    echo '</tr>';
+                }
+            } else {
+                echo '<tr><td colspan="8" class="text-center">No recent payments found.</td></tr>';
+            }
+            ?>
         </tbody>
       </table>
+    </div>
+
+    <!-- Export Dropdown -->
+    <div class="dropdown mb-3 d-flex justify-content-center">
+      <button class="btn btn-success dropdown-toggle" type="button" id="exportDropdown" data-bs-toggle="dropdown"
+        aria-expanded="false">
+        Export To
+      </button>
+      <ul class="dropdown-menu" aria-labelledby="exportDropdown">
+        <li><a class="dropdown-item" href="../../controllers/export_pdf.php">Export to PDF</a></li>
+        <li><a class="dropdown-item" href="../../controllers/export.php">Export to Excel</a></li>
+      </ul>
     </div>
 
     <!-- Recent Activity -->
@@ -355,11 +394,19 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
         <div class="activity-icon bg-soft-primary">
           <i class="fas fa-user-plus"></i>
         </div>
+        <?php if ($recentClient): ?>
         <div>
-          <h6 class="mb-1">New client registered</h6>
-          <small class="text-muted">5 minutes ago</small>
+          <h6 class="mb-1">New client registered: <?php echo htmlspecialchars($recentClient['name']); ?></h6>
+          <small class="text-muted"><?php echo date('F j, Y, g:i a', strtotime($recentClient['created_at'])); ?></small>
         </div>
       </div>
+      <?php else: ?>
+      <div class="activity-item">
+        <div>
+          <h6 class="mb-1">No recent client registrations.</h6>
+        </div>
+      </div>
+      <?php endif; ?>
       <div class="activity-item">
         <div class="activity-icon bg-soft-primary">
           <i class="fas fa-credit-card"></i>
@@ -381,8 +428,13 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     </div>
   </div>
 
+  </div>
+
+  </div>
+
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
   // Add this function for billing cycle handling
   function updatePriceLabel() {
@@ -443,6 +495,8 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
       </div>`;
   }
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 
 </html>
